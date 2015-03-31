@@ -23,6 +23,7 @@
 
 #include <avr/pgmspace.h>
 #include "thermistor.h"
+#include "arduino.h"
 
 /************************************************
  * Macros
@@ -61,7 +62,7 @@ const uint16_t cMM103J1F_LUT[] PROGMEM = {
 };
 const uint16_t cMM103J1F_length = sizeof(cMM103J1F_LUT)/sizeof(cMM103J1F_LUT[0]);
 const uint16_t cMM103J1F_units = 1;
-const uint16_t cMM103J1F_offset = -40;
+const int16_t cMM103J1F_offset = -40;
 
 //use 4K7 resistor
 const uint16_t cUSP10982_LUT[] PROGMEM = {
@@ -78,7 +79,7 @@ const uint16_t cUSP10982_LUT[] PROGMEM = {
   17795, 17355, 16929, 16503, 16094, 15694, 15304, 14916, 14539, 14173, 13811 
 };
 const uint16_t cUSP10982_length = sizeof(cUSP10982_LUT)/sizeof(cUSP10982_LUT[0]);
-const uint16_t cUSP10982_offset = -40;
+const int16_t cUSP10982_offset = -40;
 const uint16_t cUSP10982_units = 1;
 
 //use 4K7 resistor
@@ -89,7 +90,7 @@ const uint16_t cNTCALUG03A103H_LUT[] PROGMEM = {
 };
 const uint16_t cNTCALUG03A103H_length = 
   sizeof(cNTCALUG03A103H_LUT)/sizeof(cNTCALUG03A103H_LUT[0]);
-const uint16_t cNTCALUG03A103H_offset = -40;
+const int16_t cNTCALUG03A103H_offset = -40;
 const uint16_t cNTCALUG03A103H_units = 5;
 
 //default to shift a 10 bit analog value to a 16 bit value
@@ -99,19 +100,17 @@ uint8_t input_shift = 6;
  * Internal Functions
  **************************************************/
 //interpolation function
-uint16_t interpolate (uint16_t x_low16, uint16_t x_hi16, uint16_t y_low16, 
-                      uint16_t y_hi16, uint16_t x16) {
+uint16_t interpolate (uint16_t x_low16, uint16_t x_hi16, int32_t y_low, 
+                      int32_t y_hi, uint16_t x16) {
   //cast to 32 bits unsigned to avoid overflow
   int32_t x_low = (uint32_t) x_low16;
   int32_t x_hi = (uint32_t) x_hi16;
-  int32_t y_low = (uint32_t) y_low16;
-  int32_t y_hi = (uint32_t) y_hi16;
   int32_t x = (uint32_t) x16;
   return (int16_t) ( ((x_hi-x) * y_low + (x-x_low) * y_hi) / (x_hi-x_low) );
 }
 
 //return degrees C * PRECISION (good to +/- 300C for PRECISION = 100)
-int16_t getTemp (uint16_t analog_val, int8_t offset, const uint16_t * LUT, 
+int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT, 
                  uint16_t LUT_length, uint16_t units) {
   //scale analog val from 10 bit to 16 bit 
   analog_val = analog_val << input_shift;
@@ -139,8 +138,18 @@ int16_t getTemp (uint16_t analog_val, int8_t offset, const uint16_t * LUT,
   }
   
   //interpolate
-  uint16_t low_temp = (low*units + offset) * PRECISION;
-  uint16_t high_temp = (high*units + offset) * PRECISION;
+  int32_t low_temp = (int16_t(low * units + offset)) * PRECISION;
+  int32_t high_temp = (int16_t(high*units + offset)) * PRECISION;
+  /*Serial.print(low);
+  Serial.print(',');
+  Serial.print(high);
+  Serial.print(" | ");
+  Serial.print(low_temp);
+  Serial.print(":");
+  Serial.print( int16_t(low * units) + offset );
+  Serial.print(" - ");
+  Serial.print(high_temp);
+  Serial.print(" = ");*/
   return interpolate (FLASH(LUT+low), FLASH(LUT+high), low_temp, high_temp, analog_val);
 }
 
