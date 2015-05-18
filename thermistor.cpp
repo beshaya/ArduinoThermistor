@@ -23,7 +23,6 @@
 
 #include <avr/pgmspace.h>
 #include "thermistor.h"
-#include "arduino.h"
 
 /************************************************
  * Macros
@@ -93,8 +92,31 @@ const uint16_t cNTCALUG03A103H_length =
 const int16_t cNTCALUG03A103H_offset = -40;
 const uint16_t cNTCALUG03A103H_units = 5;
 
+//use 1K resistor
+const uint16_t cNTCLG100E2103JB_LUT[] PROGMEM = {
+    65338, 65262, 65163, 65031, 64861, 64643, 64365, 64016, 63581, 63046, 62395,
+    61610, 60676, 59577, 58300, 56837, 55181, 53335, 51303, 49106, 46757, 44285,
+    41730, 39120, 36485, 33875, 31320, 28841, 26463, 24206, 22085, 20106, 18271,
+    16580, 15034, 13621, 12336, 11171, 10118, 9170, 8314, 7544, 6848, 6221,
+    5662, 5156, 4701, 4292, 3922
+};
+const uint16_t cNTCLG100E2103JB_length = 
+    sizeof(cNTCLG100E2103JB_LUT)/sizeof(cNTCALUG03A103H_LUT[0]);
+const int16_t cNTCLG100E2103JB_offset = -40;
+const uint16_t cNTCLG100E2103JB_units = 5;
 //default to shift a 10 bit analog value to a 16 bit value
 uint8_t input_shift = 6;
+
+//use 4k7 resistor
+const uint16_t cNTCLE400E3103H_LUT[] PROGMEM = {
+    64620, 64275, 63822, 63236, 62487, 61545, 60379, 58961, 57267, 55281, 
+    52999, 50434, 47614, 44581, 41394, 38119, 34825, 31582, 28447, 25475,
+    22695, 20131, 17803, 15702, 13820, 12152
+};
+const uint16_t cNTCLE400E3103H_length = 
+    sizeof(cNTCLE400E3103H_LUT)/sizeof(cNTCLE400E3103H_LUT[0]);
+const int16_t cNTCLE400E3103H_offset = -40;
+const uint16_t cNTCLE400E3103H_units = 5;
 
 /**************************************************
  * Internal Functions
@@ -171,17 +193,31 @@ int16_t getNTCALUG03A103HTemp (uint16_t analog_val) {
                   cNTCALUG03A103H_length, cNTCALUG03A103H_units);
 }
 
+int16_t getNTCLG100E2103JBTemp (uint16_t analog_val) {
+    return getTemp (analog_val, cNTCLG100E2103JB_offset, cNTCLG100E2103JB_LUT,
+                    cNTCLG100E2103JB_length, cNTCLG100E2103JB_units);
+}
+
+int16_t getNTCLE400E3103HTemp (uint16_t analog_val) {
+    return getTemp (analog_val, cNTCLE400E3103H_offset, cNTCLE400E3103H_LUT,
+                    cNTCLE400E3103H_length, cNTCLE400E3103H_units);
+}    
+
 //routes according to the type
 int16_t getThermistorTemp (uint16_t analog_val, thermistor_t type) {
-  if (type == THERMISTOR_MM103J1F) {
-    return getMM103J1FTemp (analog_val);
-  } else if (type == THERMISTOR_USP10982) {
-    return getUSP10982Temp (analog_val);
-  } else if (type == THERMISTOR_NTCALUG03A103H) {
-    return getNTCALUG03A103HTemp (analog_val);
-  } else {
-    return 0x80;
-  }
+    if (type == THERMISTOR_MM103J1F) {
+        return getMM103J1FTemp(analog_val);
+    } else if (type == THERMISTOR_USP10982) {
+        return getUSP10982Temp(analog_val);
+    } else if (type == THERMISTOR_NTCALUG03A103H) {
+        return getNTCALUG03A103HTemp(analog_val);
+    } else if (type == THERMISTOR_NTCLG100E2103JB) {
+        return getNTCLG100E2103JBTemp(analog_val);
+    } else if (type == THERMISTOR_NTCLE400E3103H) {
+        return getNTCLE400E3103HTemp(analog_val);
+    }else {
+        return 0x80;
+    }
 }
 
 void thermistor_setInputShift (uint8_t new_shift) {
