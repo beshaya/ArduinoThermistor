@@ -23,6 +23,7 @@
 
 #include <avr/pgmspace.h>
 #include "thermistor.h"
+#include "Arduino.h"
 
 /************************************************
  * Macros
@@ -118,6 +119,27 @@ const uint16_t cNTCLE400E3103H_length =
 const int16_t cNTCLE400E3103H_offset = -40;
 const uint16_t cNTCLE400E3103H_units = 5;
 
+//use 100k resistor
+const uint16_t cZTP135SR_T_LUT[] PROGMEM = {
+    59281, 57502, 55380, 52902, 50082, 46954, 43580, 40025, 36395, 32767, 
+    29237, 25876, 22743, 19869, 17272, 14960, 11135, 9589, 8249, 7099, 6114, 
+    5270, 4549, 3935
+};
+const uint16_t cZTP135SR_T_length = 
+    sizeof(cZTP135SR_T_LUT)/sizeof(cZTP135SR_T_LUT[0]);
+const int16_t cZTP135SR_T_offset = -20;
+const uint16_t cZTP135SR_T_units = 5;
+
+//100x gain, @25C ambient, @1.65V midrail
+const uint16_t cZTP135SR_IR_LUT[] PROGMEM = {
+    1151, 1186, 1223, 1261, 1301, 1343, 1387, 1433, 1481, 1531, 1582, 1637, 
+    1692, 1751, 1812, 1875, 1941, 2009, 2080, 2154, 2231, 2310, 2392, 2477, 2565 
+};
+const uint16_t cZTP135SR_IR_length = 
+    sizeof(cZTP135SR_IR_LUT)/sizeof(cZTP135SR_IR_LUT[0]);
+const int16_t cZTP135SR_IR_offset = -20;
+const uint16_t cZTP135SR_IR_units = 4;
+ 
 /**************************************************
  * Internal Functions
  **************************************************/
@@ -128,7 +150,8 @@ uint16_t interpolate (uint16_t x_low16, uint16_t x_hi16, int32_t y_low,
   int32_t x_low = (uint32_t) x_low16;
   int32_t x_hi = (uint32_t) x_hi16;
   int32_t x = (uint32_t) x16;
-  return (int16_t) ( ((x_hi-x) * y_low + (x-x_low) * y_hi) / (x_hi-x_low) );
+  int32_t interpolated = ((x_hi-x) * y_low + (x-x_low) * y_hi) / (x_hi-x_low);
+  return (int16_t) ( interpolated );
 }
 
 //return degrees C * PRECISION (good to +/- 300C for PRECISION = 100)
@@ -136,12 +159,15 @@ int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT,
                  uint16_t LUT_length, uint16_t units) {
   //scale analog val from 10 bit to 16 bit 
   analog_val = analog_val << input_shift;
-
   //make sure target is in range
   //todo: better out of range handling?
-  if ( analog_val > FLASH(LUT + 0) ) return (offset - 1) * PRECISION;
+  if ( analog_val > FLASH(LUT + 0) ) {
+      Serial.print("too big");
+      return (offset - 1) * PRECISION;
+  }
   if ( analog_val < FLASH(LUT + LUT_length-1) ) {
-    return (offset + LUT_length * units + 1) * PRECISION;
+      Serial.print("too small");
+      return (offset + LUT_length * units + 1) * PRECISION;
   }
     
   //binary search to find value
@@ -150,7 +176,11 @@ int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT,
   while (high - low > 1) {
     uint16_t mid = (high+low) >> 1;
     uint16_t midval = FLASH(LUT+mid);
-    if ( midval == analog_val ) return (mid*units + offset) * PRECISION;
+    if ( midval == analog_val ) {
+        Serial.print("index:");
+        Serial.print(mid);
+        return (mid*units + offset) * PRECISION;
+    }
     //y values are in oposite order of x values
     if ( midval > analog_val ) {
       low = mid;
@@ -162,22 +192,54 @@ int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT,
   //interpolate
   int32_t low_temp = (int16_t(low * units + offset)) * PRECISION;
   int32_t high_temp = (int16_t(high*units + offset)) * PRECISION;
-  /*Serial.print(low);
-  Serial.print(',');
-  Serial.print(high);
-  Serial.print(" | ");
-  Serial.print(low_temp);
-  Serial.print(":");
-  Serial.print( int16_t(low * units) + offset );
-  Serial.print(" - ");
-  Serial.print(high_temp);
-  Serial.print(" = ");*/
   return interpolate (FLASH(LUT+low), FLASH(LUT+high), low_temp, high_temp, analog_val);
+}
+
+//binary search with ascending values (thermopile voltage is proportional)
+int16_t getIRTemp (uint16_t analog_val) {
+
+    int16_t offset = cZTP135SR_IR_offset;
+    const uint16_t * LUT = cZTP135SR_IR_LUT;
+    uint16_t LUT_length = cZTP135SR_IR_length;
+    uint16_t units = cZTP135SR_IR_units;
+  
+    if ( analog_val < FLASH(LUT + 0) ) {
+        Serial.print("too small");
+        return (offset + 1) * PRECISION;
+    }
+    if ( analog_val > FLASH(LUT + LUT_length-1) ) {
+        Serial.print("too big");
+        return (offset + LUT_length * units + 1) * PRECISION;
+    }
+    
+    //binary search to find value
+    uint16_t high = LUT_length-1;
+    uint16_t low = 0;
+    while (high - low > 1) {
+        uint16_t mid = (high+low) >> 1;
+        uint16_t midval = FLASH(LUT+mid);
+        if ( midval == analog_val ) {
+            return (mid*units + offset) * PRECISION;
+        }
+        //y values are in same order of x values
+        if ( midval < analog_val ) {
+            low = mid;
+        } else if ( midval > analog_val ) {
+            high = mid;
+        }
+    }
+    
+    //interpolate
+    int32_t low_temp = (int16_t(low * units + offset)) * PRECISION;
+    int32_t high_temp = (int16_t(high*units + offset)) * PRECISION;
+    return interpolate (FLASH(LUT+low), FLASH(LUT+high), low_temp, high_temp, analog_val);
 }
 
 /*******************************************
  * Exported Functions
  *******************************************/
+
+    
 int16_t getMM103J1FTemp (uint16_t analog_val) {
   return getTemp (analog_val, cMM103J1F_offset, cMM103J1F_LUT, cMM103J1F_length,
                   cMM103J1F_units);
@@ -203,6 +265,12 @@ int16_t getNTCLE400E3103HTemp (uint16_t analog_val) {
                     cNTCLE400E3103H_length, cNTCLE400E3103H_units);
 }    
 
+int16_t getZTP135SR_TTemp (uint16_t analog_val) {
+    return getTemp (analog_val, cZTP135SR_T_offset, cZTP135SR_T_LUT,
+                    cZTP135SR_T_length, cZTP135SR_T_units);
+}
+
+
 //routes according to the type
 int16_t getThermistorTemp (uint16_t analog_val, thermistor_t type) {
     if (type == THERMISTOR_MM103J1F) {
@@ -215,11 +283,33 @@ int16_t getThermistorTemp (uint16_t analog_val, thermistor_t type) {
         return getNTCLG100E2103JBTemp(analog_val);
     } else if (type == THERMISTOR_NTCLE400E3103H) {
         return getNTCLE400E3103HTemp(analog_val);
-    }else {
+    } else if (type == THERMISTOR_ZTP135SR_T) {
+        return getZTP135SR_TTemp(analog_val);
+    } else {
         return 0x80;
     }
 }
 
+//reduce the shifts applied to inputs (if calling program uses oversampling)
+//Default is 6 (10->16 bits) 
+//Reduce by 1 for every factor of 2 oversamplings
 void thermistor_setInputShift (uint8_t new_shift) {
   input_shift = new_shift;
+}
+
+//get the temperature of an IR sensor 
+int16_t getIR(uint16_t ir_val_raw) {
+
+    //shift to my arbitrary standard (*2) for this operation
+    int8_t shifts = (input_shift - 4);
+    if (shifts > 0) ir_val = ir_val << shifts;
+    if (shifts < 0) ir_val = ir_val >> (-1*shifts);
+    
+    int16_t ir_val = (int16_t)ir_val_raw;
+    ir_val_mv = ir_val * 5 * (1000/4) / 1024;
+    ir_val_mv = 1650;
+    int16_t ir_temp = getIRTemp(ir_val_mv);  
+    //apply as delta to sensor temperature
+    ir_temp = ir_temp  - 25 * PRECISION + thermistor_temp;
+    return ir_temp;
 }
