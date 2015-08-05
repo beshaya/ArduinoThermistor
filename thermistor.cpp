@@ -162,11 +162,11 @@ int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT,
   //make sure target is in range
   //todo: better out of range handling?
   if ( analog_val > FLASH(LUT + 0) ) {
-      Serial.print("too big");
+      //Serial.print("too big");
       return (offset - 1) * PRECISION;
   }
   if ( analog_val < FLASH(LUT + LUT_length-1) ) {
-      Serial.print("too small");
+      //Serial.print("too small");
       return (offset + LUT_length * units + 1) * PRECISION;
   }
     
@@ -177,8 +177,6 @@ int16_t getTemp (uint16_t analog_val, int16_t offset, const uint16_t * LUT,
     uint16_t mid = (high+low) >> 1;
     uint16_t midval = FLASH(LUT+mid);
     if ( midval == analog_val ) {
-        Serial.print("index:");
-        Serial.print(mid);
         return (mid*units + offset) * PRECISION;
     }
     //y values are in oposite order of x values
@@ -204,11 +202,11 @@ int16_t getIRTemp (uint16_t analog_val) {
     uint16_t units = cZTP135SR_IR_units;
   
     if ( analog_val < FLASH(LUT + 0) ) {
-        Serial.print("too small");
+        //Serial.print("too small");
         return (offset + 1) * PRECISION;
     }
     if ( analog_val > FLASH(LUT + LUT_length-1) ) {
-        Serial.print("too big");
+        //Serial.print("too big");
         return (offset + LUT_length * units + 1) * PRECISION;
     }
     
@@ -302,14 +300,12 @@ int16_t getIR(uint16_t ir_val_raw) {
 
     //shift to my arbitrary standard (*2) for this operation
     int8_t shifts = (input_shift - 4);
-    if (shifts > 0) ir_val = ir_val << shifts;
-    if (shifts < 0) ir_val = ir_val >> (-1*shifts);
-    
-    int16_t ir_val = (int16_t)ir_val_raw;
-    ir_val_mv = ir_val * 5 * (1000/4) / 1024;
-    ir_val_mv = 1650;
+    if (shifts > 0) ir_val_raw = ir_val_raw << shifts;
+    if (shifts < 0) ir_val_raw = ir_val_raw >> (-1*shifts);
+    uint32_t ir_val = (uint32_t)ir_val_raw;
+    uint32_t ir_val_mv = ir_val * 5 * (1000/4) / 1024;
     int16_t ir_temp = getIRTemp(ir_val_mv);  
-    //apply as delta to sensor temperature
-    ir_temp = ir_temp  - 25 * PRECISION + thermistor_temp;
+    //subtract default offset to get delta
+    ir_temp = ir_temp  - 25 * PRECISION;
     return ir_temp;
 }

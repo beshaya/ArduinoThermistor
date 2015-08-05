@@ -8,12 +8,15 @@
 #include "Arduino.h"
 #define PRECISION 100 //multiplier for C
 
-#define IS_THERMISTOR(type) (((type) == THERMISTOR_NONE) || \
-                             ((type) == THERMISTOR_MM103J1F) || \
-                             ((type) == THERMISTOR_USP10982) || \
-                             ((type) == THERMISTOR_NTCALUG03A103H) || \
-                             ((type) == THERMISTOR_NTCLG100E2103JB) || \
-                             ((type) == THERMISTOR_NTCLE400E3103H))                          
+#define IS_THERMISTOR(type) \
+    (((type) == THERMISTOR_NONE) ||                                    \
+     ((type) == THERMISTOR_MM103J1F) ||                                \
+     ((type) == THERMISTOR_USP10982) ||                                \
+     ((type) == THERMISTOR_NTCALUG03A103H) ||                          \
+     ((type) == THERMISTOR_NTCLG100E2103JB) ||                         \
+     ((type) == THERMISTOR_NTCLE400E3103H) ||                         \
+     ((type) == THERMISTOR_ZTP135SR_T))
+
 typedef enum {
   THERMISTOR_NONE = 0,
   THERMISTOR_MM103J1F = 1,
